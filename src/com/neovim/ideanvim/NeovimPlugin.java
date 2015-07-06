@@ -15,6 +15,7 @@ import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.editor.event.EditorFactoryAdapter;
 import com.intellij.openapi.editor.event.EditorFactoryEvent;
+import com.intellij.openapi.extensions.ExtensionPoint;
 import com.intellij.openapi.extensions.ExtensionPointListener;
 import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.extensions.PluginDescriptor;
@@ -27,7 +28,7 @@ import com.neovim.Neovim;
 import com.neovim.SocketNeovim;
 import org.jetbrains.annotations.NotNull;
 
-import javax.swing.*;
+import javax.swing.KeyStroke;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.InputEvent;
@@ -65,8 +66,12 @@ public class NeovimPlugin implements ApplicationComponent {
         }
 
         modifiedKeyListener = new ModifiedKeyListener(neovim);
+        ExtensionPoint<FileEditorProvider> fileEditorProviderExtensionPoint =
+                Extensions.getRootArea().getExtensionPoint(FileEditorProvider.EP_FILE_EDITOR_PROVIDER);
 
-        Extensions.getRootArea().getExtensionPoint(FileEditorProvider.EP_FILE_EDITOR_PROVIDER).addExtensionPointListener(new ExtensionPointListener<FileEditorProvider>() {
+        fileEditorProviderExtensionPoint.registerExtension(new EmbeddedNeovimEditorProvider(neovim));
+
+        fileEditorProviderExtensionPoint.addExtensionPointListener(new ExtensionPointListener<FileEditorProvider>() {
             @Override
             public void extensionAdded(@NotNull FileEditorProvider extension, PluginDescriptor pluginDescriptor) {
 
@@ -107,7 +112,7 @@ public class NeovimPlugin implements ApplicationComponent {
                     LOG.warn(String.valueOf(file.getPath()));
                     neovim.sendVimCommand("e! " + file.getPath());
                     //neovim.sendVimCommand("set ");
-                    neovim.sendVimCommand("autocmd CursorMoved,CursorMovedI <buffer> :w");
+                    //neovim.sendVimCommand("autocmd CursorMoved,CursorMovedI <buffer> :w");
                     buffer = neovim.getCurrentBuffer().join();
                 } else {
                     neovim.sendVimCommand("enew");

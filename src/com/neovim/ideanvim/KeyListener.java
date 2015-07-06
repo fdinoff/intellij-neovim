@@ -10,7 +10,7 @@ import com.neovim.Neovim;
 import com.neovim.Position;
 import com.neovim.Window;
 
-import javax.swing.*;
+import javax.swing.KeyStroke;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 

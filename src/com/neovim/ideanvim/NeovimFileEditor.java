@@ -12,13 +12,20 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.neovim.Neovim;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JComponent;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.beans.PropertyChangeListener;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class NeovimFileEditor extends UserDataHolderBase implements FileEditor {
+    private static final Logger log = LoggerFactory.getLogger(NeovimFileEditor.class);
     private final Neovim neovim;
     private final Project project;
     private final VirtualFile virtualFile;
@@ -29,6 +36,51 @@ public class NeovimFileEditor extends UserDataHolderBase implements FileEditor {
         this.project = checkNotNull(project);
         this.virtualFile = checkNotNull(virtualFile);
         panel = new GuiPanel(neovim);
+        neovim.sendVimCommand("e! " + virtualFile.getPath());
+        panel.addKeyListener(new KeyListener() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                neovim.sendInput(Util.formatInput(e));
+                log.error("{}: {}", Util.formatInput(e), e);
+            }
+
+            @Override
+            public void keyPressed(KeyEvent e) {
+                //log.error("{}", e);
+            }
+
+            @Override
+            public void keyReleased(KeyEvent e) {
+                //log.error("{}", e);
+            }
+        });
+        panel.addMouseListener(new MouseListener() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                panel.requestFocus();
+                //log.error("{}", e);
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                //log.error("{}", e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                //log.error("{}", e);
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                //log.error("{}", e);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                //log.error("{}", e);
+            }
+        });
     }
 
     @NotNull
