@@ -24,7 +24,7 @@ import java.awt.image.ImageObserver;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -103,25 +103,13 @@ public class GuiPanel extends JPanel {
         log.warn(String.format("size %s %s", getWidth() / width, getHeight() / height));
     }
 
-    private void drawChar(char c, int x, int y) {
-        FontMetrics fontMetrics = getFontMetrics(getFont());
-        int width = fontMetrics.charWidth(c);
-        int height = fontMetrics.getHeight();
-        if (image != null) {
-            Graphics graphics = image.getGraphics();
-            graphics.setFont(getFont());
-            graphics.drawString(
-                    Character.toString(c),
-                    width * x,
-                    height * (y + 1) - fontMetrics.getLeading() - 2);
-        }
-    }
-
     private void drawCursor(int row, int col) {
         FontMetrics fontMetrics = getFontMetrics(getFont());
         int width = fontMetrics.charWidth('W');
         int height = fontMetrics.getHeight();
-        image.getGraphics().drawRect(
+        Graphics graphics = image.getGraphics();
+        graphics.setColor(foreground.brighter());
+        graphics.drawRect(
                 width * col,
                 height * row,
                 width, height);
@@ -129,18 +117,37 @@ public class GuiPanel extends JPanel {
 
     // highlight_set
     // clear
-    // set_scroll_region [0, 42, 0, 95]
-    // scroll[-8]
     // bell
+    // normal_mode
     public class TextBuffer implements DispatcherHelper {
         private Logger log = LoggerFactory.getLogger(TextBuffer.class);
-        char[][] data;
+        Box[][] data;
         int width;
         int height;
         int col;
         int row;
+        HighlightAttributes currentHighlightAttributes = new HighlightAttributes();
+        private class Box {
+            final String value;
+            final HighlightAttributes highlightAttributes;
+
+            public Box(String value, HighlightAttributes highlightAttributes) {
+                this.value = checkNotNull(value);
+                this.highlightAttributes = checkNotNull(highlightAttributes);
+            }
+        }
         private class ScrollRegion {
             int top, bottom, left, right;
+        }
+
+        private class HighlightAttributes {
+            boolean bold;
+            boolean underline;
+            boolean undercurl;
+            boolean italic;
+            boolean reverse;
+            Color foreground;
+            Color background;
         }
 
         ScrollRegion scrollRegion = new ScrollRegion();
@@ -150,14 +157,30 @@ public class GuiPanel extends JPanel {
         public TextBuffer() {
         }
 
+        private Box[] initBoxes(int width, String s) {
+            Box[] boxes = new Box[width];
+            for (int i = 0; i < boxes.length; i++) {
+                boxes[i] = new Box(" ", currentHighlightAttributes);
+            }
+            return boxes;
+        }
+
         @NeovimHandler("update_fg")
         public void updateForeground(int rgb) {
-            foreground = new Color(rgb);
+            if (rgb == -1) {
+                foreground = JBColor.BLACK;
+            } else {
+                foreground = new Color(rgb);
+            }
         }
 
         @NeovimHandler("update_bg")
         public void updateBackground(int rgb) {
-            background = new Color(rgb);
+            if (rgb == -1) {
+                background = JBColor.WHITE;
+            } else {
+                background = new Color(rgb);
+            }
         }
 
         @NeovimHandler("resize")
@@ -167,15 +190,37 @@ public class GuiPanel extends JPanel {
             this.height = height;
             scrollRegion.top = 0;
             scrollRegion.bottom = height;
-            data = new char[height + 1][width + 1];
-            clear();
+            data = new Box[height + 1][width + 1];
+            for (int i = 0 ; i < data.length; i++) {
+                for (int j = 0; j < data.length; j++) {
+                    data[i][j] = new Box(" ", currentHighlightAttributes);
+                }
+            }
         }
 
         @NeovimHandler("clear")
         public void clear() {
-            for (char[] d : data) {
-                Arrays.fill(d, ' ');
+            for (Box[] d : data) {
+                for (int i = 0; i < d.length; i++) {
+                    d[i] = new Box(" ", currentHighlightAttributes);
+                }
             }
+        }
+
+        @NeovimHandler("highlight_set")
+        public void setHighlightAttributes(Map<String, Object> attributes) {
+            HighlightAttributes attrs = new HighlightAttributes();
+            if (attributes.containsKey("background")) {
+                attrs.background = new Color((Integer) attributes.get("background"));
+            } else {
+                attrs.background = background;
+            }
+            if (attributes.containsKey("foreground")) {
+                attrs.foreground = new Color((Integer) attributes.get("foreground"));
+            } else {
+                attrs.foreground = foreground;
+            }
+            currentHighlightAttributes = attrs;
         }
 
         @NeovimHandler("set_scroll_region")
@@ -203,9 +248,7 @@ public class GuiPanel extends JPanel {
                         data, scrollRegion.top,
                         length - count);
                 for (int i = scrollRegion.bottom - 1; i > scrollRegion.bottom - 1 - count; i--) {
-                    char[] d = new char[width];
-                    Arrays.fill(d, ' ');
-                    data[i] = d;
+                    data[i] = initBoxes(width, " ");
                 }
             } else if (count < 0) {
                 count = -count;
@@ -213,9 +256,7 @@ public class GuiPanel extends JPanel {
                         width, height, scrollRegion.bottom, scrollRegion.top, scrollRegion.top + count, length - count));
                 System.arraycopy(data, scrollRegion.top, data, scrollRegion.top + count, length - count);
                 for (int i = scrollRegion.top; i < scrollRegion.top + count; i++) {
-                    char[] d = new char[width];
-                    Arrays.fill(d, ' ');
-                    data[i] = d;
+                    data[i] = initBoxes(width, " ");
                 }
             }
         }
@@ -228,19 +269,16 @@ public class GuiPanel extends JPanel {
 
         @NeovimHandler("put")
         public void put(byte[] c) {
-            System.out.println(Arrays.toString(c));
             CharBuffer decode = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(c));
             if (decode.length() != 1) {
                 log.error("put not one character " + decode);
                 return;
             }
-            char c1 = decode.get();
-            //drawChar(c1, row, col);
             if (row > height || col > width) {
                 log.error(String.format("bad size %s, %s > %s, %s", row, col, height, width));
                 return;
             }
-            data[row][col] = c1;
+            data[row][col] = new Box(decode.toString(), currentHighlightAttributes);
             col++;
             if (col % width == 0) {
                 col = 0;
@@ -254,7 +292,7 @@ public class GuiPanel extends JPanel {
         @NeovimHandler("eol_clear")
         public void clearToEnd() {
             for (int i = col; i < width; i++) {
-                data[row][i] = ' ';
+                data[row][i] = new Box(" ", currentHighlightAttributes);
             }
         }
 
@@ -277,18 +315,36 @@ public class GuiPanel extends JPanel {
             if (image == null) {
                 return;
             }
-            drawCursor(row, col);
             for (int i = 0; i < data.length; i++) {
                 for (int j = 0; j < data[i].length; j++) {
-                    drawChar(data[i][j], j, i);
+                    drawBox(data[i][j], j, i);
                 }
             }
+            drawCursor(row, col);
         }
 
         @Override
         public void setDispatcher(Dispatcher dispatcher) {
             this.dispatcher = checkNotNull(dispatcher);
         }
+
+        private void drawBox(Box box, int x, int y) {
+            FontMetrics fontMetrics = getFontMetrics(getFont());
+            int width = fontMetrics.charWidth('W');
+            int height = fontMetrics.getHeight();
+            Graphics2D graphics = (Graphics2D) image.getGraphics();
+            graphics.setFont(getFont());
+            graphics.setColor(box.highlightAttributes.background);
+            graphics.fillRect(width * x, height * y, width, height);
+            graphics.setColor(box.highlightAttributes.foreground);
+            //graphics.setBackground(box.highlightAttributes.background);
+            //graphics.setColor(box.highlightAttributes.foreground);
+            graphics.drawString(
+                    box.value,
+                    width * x,
+                    height * (y + 1) - fontMetrics.getLeading() - 2);
+        }
+
     }
 }
 

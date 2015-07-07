@@ -61,8 +61,7 @@ public class NeovimPlugin implements ApplicationComponent {
             neovim.setOption("hidden", true);
         } catch (IOException e) {
             LOG.error(e.getMessage(), e);
-            // TODO: Proper error handling
-            throw new UncheckedIOException(e);
+            return;
         }
 
         modifiedKeyListener = new ModifiedKeyListener(neovim);
@@ -204,13 +203,15 @@ public class NeovimPlugin implements ApplicationComponent {
 
     @Override
     public void disposeComponent() {
-        try {
-            neovim.close();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        if (neovim != null) {
+            try {
+                neovim.close();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
 
-        restoreHandler();
+            restoreHandler();
+        }
     }
 
     public void setupHandler() {
