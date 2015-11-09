@@ -1,36 +1,27 @@
 package com.neovim.ideanvim;
 
+import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.KeyboardShortcut;
 import com.intellij.openapi.actionSystem.Shortcut;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.ApplicationComponent;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.actionSystem.EditorActionManager;
 import com.intellij.openapi.editor.actionSystem.TypedAction;
 import com.intellij.openapi.editor.actionSystem.TypedActionHandler;
-import com.intellij.openapi.editor.event.DocumentEvent;
-import com.intellij.openapi.editor.event.DocumentListener;
-import com.intellij.openapi.editor.event.EditorFactoryAdapter;
-import com.intellij.openapi.editor.event.EditorFactoryEvent;
 import com.intellij.openapi.extensions.ExtensionPoint;
 import com.intellij.openapi.extensions.ExtensionPointListener;
 import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.extensions.PluginDescriptor;
-import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileEditorProvider;
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.neovim.Buffer;
 import com.neovim.Neovim;
 import com.neovim.SocketNeovim;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.KeyStroke;
-import java.awt.event.FocusEvent;
-import java.awt.event.FocusListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
@@ -48,8 +39,13 @@ public class NeovimPlugin implements ApplicationComponent {
     private Neovim neovim;
     private TypedActionHandler originalTypedActionHandler;
     private ModifiedKeyListener modifiedKeyListener;
+    private NeovimDocumentListener neovimDocumentListener;
 
     public NeovimPlugin() {
+    }
+
+    public static NeovimPlugin getInstance() {
+        return (NeovimPlugin) ApplicationManager.getApplication().getComponent(COMPONENT_NAME);
     }
 
     @Override
@@ -58,12 +54,15 @@ public class NeovimPlugin implements ApplicationComponent {
 
         try {
             neovim = Neovim.connectTo(new SocketNeovim("127.0.0.1:6666"));
-            neovim.setOption("hidden", true);
         } catch (IOException e) {
             LOG.error(e.getMessage(), e);
             return;
         }
+        //AnAction hello = ActionManager.getInstance().getAction("Hello");
+        System.out.println(Arrays.asList(ActionManager.getInstance().getActionIds("")));
+        //hello.actionPerformed(AnActionEvent.createFromDataContext("vim", null, DataContext.EMPTY_CONTEXT));
 
+        neovim.setOption("hidden", true);
         modifiedKeyListener = new ModifiedKeyListener(neovim);
         ExtensionPoint<FileEditorProvider> fileEditorProviderExtensionPoint =
                 Extensions.getRootArea().getExtensionPoint(FileEditorProvider.EP_FILE_EDITOR_PROVIDER);
@@ -82,6 +81,10 @@ public class NeovimPlugin implements ApplicationComponent {
             }
         });
 
+        neovimDocumentListener = new NeovimDocumentListener(neovim);
+        EditorFactory.getInstance().getEventMulticaster().addDocumentListener(neovimDocumentListener);
+
+        /*
         EditorFactory.getInstance().addEditorFactoryListener(new EditorFactoryAdapter() {
             @Override
             public void editorCreated(@NotNull EditorFactoryEvent event) {
@@ -181,6 +184,7 @@ public class NeovimPlugin implements ApplicationComponent {
             }
         }, ApplicationManager.getApplication());
         setupHandler();
+        */
         LOG.warn("init done");
     }
 
@@ -205,12 +209,13 @@ public class NeovimPlugin implements ApplicationComponent {
     public void disposeComponent() {
         if (neovim != null) {
             try {
+                neovim.sendVimCommand("autocmd! IdeaNvim");
                 neovim.close();
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
 
-            restoreHandler();
+            //restoreHandler();
         }
     }
 
@@ -230,5 +235,9 @@ public class NeovimPlugin implements ApplicationComponent {
     @Override
     public String getComponentName() {
         return COMPONENT_NAME;
+    }
+
+    public NeovimDocumentListener getNeovimDocumentListener() {
+        return neovimDocumentListener;
     }
 }

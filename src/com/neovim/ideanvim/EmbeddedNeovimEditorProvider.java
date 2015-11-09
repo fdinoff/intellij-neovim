@@ -61,6 +61,6 @@ public class EmbeddedNeovimEditorProvider implements FileEditorProvider, DumbAwa
     @NotNull
     @Override
     public FileEditorPolicy getPolicy() {
-        return FileEditorPolicy.HIDE_DEFAULT_EDITOR;
+        return FileEditorPolicy.PLACE_BEFORE_DEFAULT_EDITOR;
     }
 }

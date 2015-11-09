@@ -1,6 +1,7 @@
 package com.neovim.ideanvim;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.ui.JBColor;
 import com.neovim.Dispatcher;
 import com.neovim.DispatcherHelper;
@@ -11,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -28,7 +28,6 @@ import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.neovim.msgpack.JsonNodeUtil.formatJsonNode;
 
 public class GuiPanel extends JPanel {
     private static final Logger log = LoggerFactory.getLogger(EmbeddedNeovimEditorProvider.class);
@@ -190,6 +189,8 @@ public class GuiPanel extends JPanel {
             this.height = height;
             scrollRegion.top = 0;
             scrollRegion.bottom = height;
+            col = 0;
+            row = 0;
             data = new Box[height + 1][width + 1];
             for (int i = 0 ; i < data.length; i++) {
                 for (int j = 0; j < data.length; j++) {
@@ -241,8 +242,6 @@ public class GuiPanel extends JPanel {
             }
             int length = scrollRegion.bottom - scrollRegion.top + 1;
             if (count > 0) {
-                log.warn(String.format("(%sx%s) data.length = %s, System.arraycopy(data, %s, data, %s, %s)",
-                        width, height, scrollRegion.bottom, count, 0, length - count));
                 System.arraycopy(
                         data, scrollRegion.top + count,
                         data, scrollRegion.top,
@@ -252,8 +251,6 @@ public class GuiPanel extends JPanel {
                 }
             } else if (count < 0) {
                 count = -count;
-                log.warn(String.format("(%sx%s) data.length = %s, System.arraycopy(data, %s, data, %s, %s)",
-                        width, height, scrollRegion.bottom, scrollRegion.top, scrollRegion.top + count, length - count));
                 System.arraycopy(data, scrollRegion.top, data, scrollRegion.top + count, length - count);
                 for (int i = scrollRegion.top; i < scrollRegion.top + count; i++) {
                     data[i] = initBoxes(width, " ");
@@ -299,20 +296,23 @@ public class GuiPanel extends JPanel {
         @NeovimHandler("redraw")
         public void redraw(JsonNode values) {
             checkState(dispatcher != null);
-            System.out.println(String.format("size %s: %s", values.size(), formatJsonNode(values)));
+            ApplicationManager.getApplication().invokeLater(() -> {
+                        //System.out.println(String.format("size %s: %s", values.size(), formatJsonNode(values)));
 
-            for (JsonNode v : values) {
-                String name = JsonNodeUtil.getText(v.get(0));
-                for (int i = 1; i < v.size(); i++) {
-                    //System.out.println(name + "(" + formatJsonNode(v.get(i)) + ")");
-                    dispatcher.dispatchMethod(name, v.get(i));
-                }
-            }
-            SwingUtilities.invokeLater(GuiPanel.this::repaint);
+                        for (JsonNode v : values) {
+                            String name = JsonNodeUtil.getText(v.get(0));
+                            for (int i = 1; i < v.size(); i++) {
+                                //System.out.println(name + "(" + formatJsonNode(v.get(i)) + ")");
+                                dispatcher.dispatchMethod(name, v.get(i));
+                            }
+                        }
+                        GuiPanel.this.repaint();
+                    }
+            );
         }
 
         public void drawImage() {
-            if (image == null) {
+            if (image == null || data == null) {
                 return;
             }
             for (int i = 0; i < data.length; i++) {
